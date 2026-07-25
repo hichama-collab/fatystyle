@@ -1,6 +1,6 @@
 (function () {
   const page = (location.pathname.split("/").pop() || "index.html").replace(/#.*$/, "");
-  const cacheBust = "ts=" + Date.now();
+  const contentCacheKey = "fatystyle-content-v2";
 
   const text = (selector, value, root = document) => {
     const node = root.querySelector(selector);
@@ -312,10 +312,31 @@
     return;
   }
 
-  fetch("data/content.json?" + cacheBust)
-    .then((response) => response.ok ? response.json() : Promise.reject(new Error("content.json introuvable")))
-    .then(applyContent)
+  let cachedContent = null;
+  let cachedContentRaw = "";
+  try {
+    cachedContentRaw = sessionStorage.getItem(contentCacheKey) || "";
+    cachedContent = cachedContentRaw ? JSON.parse(cachedContentRaw) : null;
+  } catch (error) {
+    cachedContent = null;
+    cachedContentRaw = "";
+  }
+
+  if (cachedContent) applyContent(cachedContent);
+
+  fetch("data/content.json", { cache: "no-cache" })
+    .then((response) => response.ok ? response.text() : Promise.reject(new Error("content.json introuvable")))
+    .then((contentRaw) => {
+      if (contentRaw === cachedContentRaw) return;
+      const content = JSON.parse(contentRaw);
+      try {
+        sessionStorage.setItem(contentCacheKey, contentRaw);
+      } catch (error) {
+        // Le contenu reste utilisable même si le stockage de session est indisponible.
+      }
+      applyContent(content);
+    })
     .catch(() => {
-      window.dispatchEvent(new CustomEvent("fatystyle:content-ready"));
+      if (!cachedContent) window.dispatchEvent(new CustomEvent("fatystyle:content-ready"));
     });
 })();
